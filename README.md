@@ -6,60 +6,113 @@ Test target: Gentoo Linux x86_64, OpenRC, Hyprland 0.54.x, Wayland.
 
 ## Recommended deployment: LXC backend + main Gentoo desktop vision
 
-For your setup, keep the **Jimmy backend services in a Proxmox LXC** and keep the **LLaVA vision model on the main Gentoo gaming PC**. This keeps desktop/vision work close to the camera and GPU while the LXC can host the backend, memory, APIs, and orchestration services.
+For your setup, keep the **Jimmy backend services in a Proxmox LXC** and keep the **LLaVA vision model on the main Gentoo gaming PC**.
 
 ```text
-                         Proxmox host
-                              │
-                    ┌─────────▼─────────┐
-                    │   Jimmy Backend   │
-                    │       LXC         │
-                    │                   │
-                    │ • jimmy_backend   │
-                    │ • PostgreSQL      │
-                    │ • memory/API      │
-                    │ • Jonathan bridge │
-                    └─────────┬─────────┘
-                              │ LAN
-                              │
-                    ┌─────────▼─────────┐
-                    │ Main Gentoo PC    │
-                    │                   │
-                    │ • jimmy daemon   │
-                    │ • LLaVA/Ollama   │
-                    │ • camera/presence│
-                    │ • pink Y2K UI    │
-                    │ • Hyprland       │
-                    └───────────────────┘
+Proxmox host
+└── Jimmy LXC
+    ├── jimmy_backend
+    ├── PostgreSQL / memory
+    └── Jonathan/backend services
+             │
+             │ private LAN
+             ▼
+Main Gentoo PC
+├── Ollama :11434
+│   ├── llama3.2       ← text
+│   └── llava:latest   ← vision
+├── Jimmy :8787
+├── presence :8791
+├── UI :8788
+└── Hyprland / desktop
 ```
 
-### Which machine runs what?
+## Creating the LXC from the Proxmox CLI
 
-**Proxmox LXC:** backend/API services, PostgreSQL/memory, Jonathan integration, and other network services. The LXC does not need the desktop camera or Hyprland session.
+Run these commands **on the Proxmox host**, not inside the future container.
 
-**Main Gentoo PC:** Jimmy's desktop daemon, the local Rust presence detector, the pink UI, and Ollama with the **LLaVA vision model**. This is also where desktop actions happen.
+First find the storage, network bridge, and available container templates:
 
-The important distinction is that `llama3.2` is the normal text model, while `llava` is the separate vision model. Do not try to send images to the text-only `llama3.2` model.
+```bash
+pvesm status
+ip -br link
+pveam update
+pveam available --section system | grep -E 'debian|ubuntu'
+```
 
-## Network addresses
+Download a Debian template. Replace `local` if your template storage has another name:
 
-The repository currently uses these known LAN services:
+```bash
+pveam download local debian-13-standard_13.1-1_amd64.tar.zst
+```
 
-- Text Ollama: `http://192.168.10.181:11434`
-- Voice service: `http://192.168.10.182:5006`
+Find the downloaded template:
 
-For the recommended layout, `192.168.10.181:11434` should be the **main Gentoo PC's Ollama service**, because that is where LLaVA should run. The LXC should connect to it over the private LAN when it needs vision.
+```bash
+pveam list local
+```
 
-Do **not** replace every `127.0.0.1` with a LAN IP. Desktop-local services such as Jimmy, the presence detector, and the UI should remain localhost unless you deliberately add authentication and firewall rules.
+Create the LXC. Example values below use CT ID `200`, hostname `jimmy-backend`, `4` CPU cores, `4G` RAM, `20G` root disk, and bridge `vmbr0`:
 
-## v0.3: local AI + vision + voice + presence
+```bash
+pct create 200 local:vztmpl/debian-13-standard_13.1-1_amd64.tar.zst \
+  --hostname jimmy-backend \
+  --cores 4 \
+  --memory 4096 \
+  --swap 1024 \
+  --rootfs local:20 \
+  --net0 name=eth0,bridge=vmbr0,ip=192.168.10.190/24,gw=192.168.10.1 \
+  --unprivileged 1 \
+  --onboot 1 \
+  --features nesting=1
+```
 
-Jimmy uses two different Ollama roles:
+**Change `192.168.10.190` to an unused IP on your LAN.** Also change `192.168.10.1` if that is not your router/gateway, and change `vmbr0` if your Proxmox LAN bridge has another name.
 
-- Text AI: `llama3.2`
-- Vision AI: `llava:latest` (or another installed vision-capable Ollama model)
+Set the container password:
 
-The main Gentoo PC should run Ollama and have both models available. Example:
+```bash
+pct set 200 --password
+```
+
+Start it:
+
+```bash
+pct start 200
+```
+
+Enter the new LXC:
+
+```bash
+pct enter 200
+```
+
+Inside the LXC:
+
+```bash
+apt update
+apt upgrade -y
+apt install -y git curl build-essential pkg-config libssl-dev ca-certificates
+```
+
+Then clone Jimmy:
+
+```bash
+git clone https://github.com/harry1489/Jimmy.git /opt/Jimmy
+cd /opt/Jimmy
+```
+
+If the LXC is only being used as the backend, **do not install LLaVA in the LXC**. The LXC will call Ollama/LLaVA on the main Gentoo PC over the LAN.
+
+## Put LLaVA on the main Gentoo PC
+
+On the **main Gentoo gaming PC**, verify Ollama:
+
+```bash
+curl http://127.0.0.1:11434/api/tags
+```
+
+Install the text and vision models there:
 
 ```bash
 ollama pull llama3.2
@@ -67,55 +120,11 @@ ollama pull llava:latest
 ollama list
 ```
 
-The voice service is separate:
+The main PC should have Ollama listening on its private LAN address as well as locally. In your current layout that is intended to be:
 
-- Voice service: `http://192.168.10.182:5006`
-- STT: `whisper.cpp tiny.en`
-- TTS: Piper
-- Fixed voice: `en_US-lessac-medium.onnx`
-- Speech rate: `0.9`
-
-## 1. Create the backend LXC on the Proxmox host
-
-Create a normal unprivileged Debian or Ubuntu LXC with a fixed LAN address. Give it enough CPU/RAM for the backend and PostgreSQL, but **do not pass the gaming GPU or webcam through to this container** if LLaVA and presence detection are staying on the main Gentoo PC.
-
-Inside the LXC:
-
-```bash
-apt update
-apt install -y git build-essential curl pkg-config libssl-dev
-
-git clone https://github.com/harry1489/Jimmy.git
-cd Jimmy
-cargo build --release
+```text
+http://192.168.10.181:11434
 ```
-
-Install the backend:
-
-```bash
-sudo install -Dm755 target/release/jimmy_backend /usr/local/bin/jimmy_backend
-sudo install -Dm755 admin/jimmy-admin /usr/local/libexec/jimmy-admin
-sudo install -Dm755 openrc/jimmy-backend /etc/init.d/jimmy-backend
-```
-
-If this LXC is Debian/Ubuntu rather than Gentoo, the existing OpenRC service file may need adapting to the LXC's init system. The backend binary itself does not require Hyprland.
-
-Copy the configuration:
-
-```bash
-sudo mkdir -p /etc/jimmy
-sudo install -Dm600 config/jimmy.toml.example /etc/jimmy/config.toml
-```
-
-Set the backend's Ollama/vision URL to the **main Gentoo PC**, not localhost:
-
-```toml
-ollama_url = "http://192.168.10.181:11434"
-vision_url = "http://192.168.10.181:11434"
-vision_model = "llava:latest"
-```
-
-The LXC can now ask the main PC's Ollama/LLaVA service for vision without running the model itself.
 
 Test from the LXC:
 
@@ -123,159 +132,116 @@ Test from the LXC:
 curl http://192.168.10.181:11434/api/tags
 ```
 
-You should see the models installed on the main Gentoo PC.
+If that works, the LXC can use the main PC's LLaVA without having its own copy of the model.
 
-## 2. Install Ollama + LLaVA on the main Gentoo PC
+Do not expose port `11434` to the public Internet. Allow it only from your trusted LAN/VPN and firewall it appropriately.
 
-The main PC is the machine with the Intel Arc B580, camera, Hyprland session, and desktop access. Run Ollama there.
+## Build Jimmy in the LXC
 
-Verify that Ollama is reachable locally:
-
-```bash
-curl http://127.0.0.1:11434/api/tags
-```
-
-Then install the models:
+Inside the LXC:
 
 ```bash
-ollama pull llama3.2
-ollama pull llava:latest
-ollama list
-```
-
-The important part is that **LLaVA lives on this machine**. Jimmy's vision requests should point at:
-
-```text
-http://192.168.10.181:11434
-```
-
-if `192.168.10.181` is the Gentoo PC's LAN address.
-
-If Ollama is bound only to `127.0.0.1`, the LXC will not be able to reach it. Configure Ollama to listen on the Gentoo PC's private LAN interface, and firewall it so it is reachable only from your trusted LAN/VPN. Do not expose port 11434 to the public Internet.
-
-## 3. Install Jimmy on the main Gentoo PC
-
-On Gentoo:
-
-```bash
-git clone https://github.com/harry1489/Jimmy.git
-cd Jimmy
+cd /opt/Jimmy
 cargo build --release
-
-sudo install -Dm755 target/release/jimmy /usr/local/bin/jimmy
-sudo install -Dm755 target/release/jimmy_presence /usr/local/bin/jimmy_presence
-sudo install -Dm755 target/release/jimmy_ui /usr/local/bin/jimmy_ui
-sudo mkdir -p /etc/jimmy
-sudo install -Dm600 config/jimmy.toml.example /etc/jimmy/config.toml
+install -Dm755 target/release/jimmy_backend /usr/local/bin/jimmy_backend
 ```
 
-Generate a real secret and edit the configuration before starting services:
-
-```bash
-sudo sed -i "s/REPLACE_WITH_A_64_HEX_CHARACTER_SECRET/$(openssl rand -hex 32)/" /etc/jimmy/config.toml
-sudo chown harry:users /etc/jimmy/config.toml
-sudo chmod 600 /etc/jimmy/config.toml
-```
-
-For this deployment, the important configuration is:
+Configure the backend to point to the main Gentoo PC:
 
 ```toml
-# Main text AI / Ollama on the Gentoo PC
 ollama_url = "http://192.168.10.181:11434"
-ollama_model = "llama3.2"
-
-# Vision is also on the Gentoo PC
 vision_url = "http://192.168.10.181:11434"
 vision_model = "llava:latest"
-
-# Desktop-local services stay local
-presence_bind = "127.0.0.1:8791"
-ui_bind = "127.0.0.1:8788"
-
-# Remote voice service
-voice_url = "http://192.168.10.182:5006"
-voice_status_url = "http://192.168.10.182:5006/health"
 ```
 
-The desktop daemon should stay on localhost unless you intentionally build a private authenticated network endpoint for it.
+The LXC therefore acts as the backend, while the main PC owns the vision model and desktop hardware.
 
-## 4. Install the local presence detector and UI
+## Proxmox CLI management
 
-Jimmy's presence detector is Rust + OpenCV. It uses a local Haar-cascade face detector only to determine whether somebody is in front of the PC. It does **not** identify the person, store face embeddings, or send camera frames to LLaVA.
-
-Install the OpenRC services:
+From the Proxmox host you can manage the LXC with:
 
 ```bash
-sudo install -Dm755 openrc/jimmy /etc/init.d/jimmy
-sudo install -Dm755 openrc/jimmy-presence /etc/init.d/jimmy-presence
-sudo install -Dm755 openrc/jimmy-ui /etc/init.d/jimmy-ui
-
-sudo rc-update add jimmy default
-sudo rc-update add jimmy-presence default
-sudo rc-update add jimmy-ui default
-
-sudo rc-service jimmy-presence start
-sudo rc-service jimmy-ui start
-sudo rc-service jimmy start
+pct status 200
+pct start 200
+pct shutdown 200
+pct stop 200
+pct enter 200
+pct exec 200 -- systemctl status
+pct console 200
+pct config 200
 ```
 
-Make sure the desktop user can access the camera, normally through the `video` group.
+To see all containers:
 
-The local UI is:
+```bash
+pct list
+```
+
+To remove the container later, stop it first and then destroy it:
+
+```bash
+pct stop 200
+pct destroy 200
+```
+
+Be careful with `pct destroy`; it deletes the container and its local data.
+
+## Gentoo desktop services
+
+The main Gentoo PC runs:
+
+- Ollama + `llama3.2`
+- Ollama + `llava:latest`
+- `jimmy`
+- Rust/OpenCV `jimmy_presence`
+- `jimmy_ui`
+- Hyprland
+- Desktop applications
+
+Desktop-local endpoints should remain on localhost:
 
 ```text
-http://127.0.0.1:8788
+Jimmy       127.0.0.1:8787
+Presence    127.0.0.1:8791
+UI          127.0.0.1:8788
 ```
 
-It shows the pink Y2K Jimmy interface, local presence state, and the active state when the UI receives the `Hey Jimmy` wake event.
-
-## 5. Start the backend LXC
-
-Once the main Gentoo PC's Ollama/LLaVA endpoint is reachable from the LXC, start the backend service there.
-
-The backend should use the main PC as its vision provider:
+Remote services use their LAN addresses:
 
 ```text
-LXC backend
-    │
-    │ POST vision request
-    ▼
-192.168.10.181:11434
-    │
-    ▼
-LLaVA on main Gentoo PC
+Ollama/LLaVA  192.168.10.181:11434
+Voice         192.168.10.182:5006
+Jimmy LXC     192.168.10.190   ← example; choose your actual unused IP
 ```
 
-This means you only maintain the LLaVA model on the gaming PC instead of duplicating the large model inside the LXC.
+Do not blindly replace every `127.0.0.1` in the configuration with a LAN address. The local desktop services are intentionally localhost-only.
 
-## 6. Final recommended layout
+## Voice / "Hey Jimmy"
+
+The configured voice service is currently:
 
 ```text
-Proxmox host
-│
-└── Jimmy LXC
-    ├── jimmy_backend
-    ├── PostgreSQL / memory
-    ├── Jonathan integration
-    └── other backend APIs
-          │
-          │ private LAN
-          ▼
-Main Gentoo gaming PC
-├── Ollama :11434
-│   ├── llama3.2       ← text
-│   └── llava:latest   ← vision
-├── jimmy :8787
-├── jimmy_presence :8791
-├── jimmy_ui :8788
-├── Hyprland / Wayland
-├── camera
-└── desktop applications
-          │
-          └── Voice service: 192.168.10.182:5006
+Voice service: 192.168.10.182:5006
+STT:           whisper.cpp tiny.en
+TTS:           Piper
+Voice:         en_US-lessac-medium.onnx
 ```
 
-This is the cleanest split for your setup: **the LXC is the backend brain/services, while the main Gentoo PC owns the actual vision model and desktop hands.**
+The pink UI runs locally at `http://127.0.0.1:8788` and has a wake-event endpoint for `Hey Jimmy`. The remote voice service still needs a deliberate authenticated event bridge before it can notify that local UI over the LAN.
+
+## Security
+
+Keep the LXC unprivileged. It does not need the gaming GPU or webcam when LLaVA and presence detection are on the main PC.
+
+Do not expose these services directly to the public Internet:
+
+- Ollama `:11434`
+- Jimmy `:8787`
+- UI `:8788`
+- Presence `:8791`
+- Backend administration endpoints
+
+Use a firewall and, for remote access, a private VPN/mesh network. Keep Jimmy's HMAC authentication enabled and do not treat a spoken phrase as administrator authentication.
 
 ## Desktop capabilities
 
@@ -289,91 +255,8 @@ This is the cleanest split for your setup: **the LXC is the backend brain/servic
 - Switch workspaces 1..99.
 - Take screenshots into `/tmp` using `grim`.
 - Require confirmation for dangerous/sensitive actions.
-- Store the original arguments with pending confirmations and expire them automatically.
 - Refuse arbitrary shell commands.
 - Refuse mouse/keyboard injection until its Linux permissions are explicitly configured.
-
-## Security model
-
-Jimmy is intentionally **not** a root daemon. Keep desktop-local services bound to `127.0.0.1` unless you deliberately add a private authenticated network layer.
-
-Do not expose Ollama port 11434, Jimmy port 8787, the UI, or backend administration endpoints to the public Internet. Use a firewall and preferably a private VPN/mesh network for machine-to-machine traffic.
-
-The main AI should never be granted unrestricted shell access. Admin operations should remain fixed allowlisted actions, authenticated, and subject to the confirmation flow.
-
-## Voice / "Hey Jimmy"
-
-The configured voice stack is designed around:
-
-```text
-microphone
-  ↓
-wake-word detector ("Hey Jimmy")
-  ↓
-whisper.cpp tiny.en
-  ↓
-Ollama llama3.2
-  ↓
-structured Jimmy action / response
-  ↓
-permission engine
-  ↓
-Piper en_US-lessac-medium.onnx
-```
-
-The current Rust daemon records and reports the voice configuration and can health-check the service at port 5006. It does not assume an undocumented audio API for that service.
-
-The UI has a local wake endpoint:
-
-```http
-POST http://127.0.0.1:8788/api/wake
-Content-Type: application/json
-
-{"phrase":"Hey Jimmy"}
-```
-
-The remote voice service still needs a deliberate authenticated event bridge to call this endpoint. Do not expose the unauthenticated local UI endpoint directly to the LAN.
-
-## Main AI / Jonathan / remote control
-
-The intended approval path is:
-
-```text
-Jimmy needs approval
-        ↓
-check local presence
-   ┌────┴────┐
-   │         │
-present    away/unknown
-   │         │
-ask user   ask Jonathan
-locally       ↓
-          Jonathan asks user remotely
-                ↓
-          authenticated approval
-                ↓
-              Jimmy
-```
-
-Jonathan should act as the authenticated orchestrator/messenger. A spoken phrase must never by itself become proof of administrator authority.
-
-Pending approvals should be short-lived, one-time, tied to the exact requested action and arguments, and rejected after expiry.
-
-## Future input-control module
-
-Mouse/keyboard control is deliberately disabled. When it is added, use a narrowly scoped helper backed by Linux `uinput`/`ydotool` permissions rather than making Jimmy root. Give input control its own permission class and require confirmation by default.
-
-## System profile used for the initial design
-
-- Gentoo Linux x86_64
-- OpenRC
-- Hyprland 0.54.0 / Wayland
-- Intel Core i7-8700
-- Intel Arc B580
-- 32 GiB RAM
-- Fish 4.6
-- Alacritty 0.16.1
-- 1920x1080 @ 240 Hz
 
 ## License
 
