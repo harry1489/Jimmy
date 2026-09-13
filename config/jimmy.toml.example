@@ -70,14 +70,19 @@ VISUAL RULES
 OUTPUT STYLE
 Be concise, precise, grounded, and useful. Return a clear visual description that another AI can safely use for reasoning.'''
 
-# Local presence detection. This is presence-only, not face identification.
+# Local presence detection. Rust + OpenCV Haar face detector. Presence only, never identity.
 presence_enabled = true
-presence_helper = "/usr/local/libexec/jimmy-presence"
+presence_helper = "/usr/local/bin/jimmy_presence"
+presence_bind = "127.0.0.1:8791"
 presence_camera_device = "/dev/video0"
-presence_sample_interval_ms = 250
-presence_present_samples = 3
+presence_sample_interval_ms = 1000
+presence_present_samples = 2
 presence_away_after_seconds = 30
 presence_route_when_unavailable = "jonathan"
+
+# Local pink Y2K UI. The wake-word service should POST {"phrase":"Hey Jimmy"} to /api/wake.
+ui_bind = "127.0.0.1:8788"
+ui_url = "http://127.0.0.1:8788"
 
 # Jonathan is the authenticated remote messenger for approvals when Harry is away.
 trusted_agent = "jonathan"
@@ -96,7 +101,7 @@ loaded_voices = [
   "en_US-amy-low.onnx",
   "en_GB-southern_english_female-low.onnx",
   "en_US-danny-low.onnx",
-  "en_GB-alan-medium.onnx",
+  "en_GB-alan-medium-low.onnx",
 ]
 piper = true
 voice_port = 5006
