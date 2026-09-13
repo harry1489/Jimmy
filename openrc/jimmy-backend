@@ -1,0 +1,13 @@
+#!/sbin/openrc-run
+command="/usr/local/bin/jimmy_backend"
+command_args="/etc/jimmy/config.toml"
+command_user="harry:users"
+command_background=true
+pidfile="/run/${RC_SVCNAME}.pid"
+output_log="/var/log/${RC_SVCNAME}.log"
+error_log="/var/log/${RC_SVCNAME}.err"
+
+depend() {
+    need net
+    after jimmy
+}
