@@ -4,14 +4,19 @@ bind = "127.0.0.1:8787"
 name = "Jimmy"
 shared_secret = "REPLACE_WITH_A_64_HEX_CHARACTER_SECRET"
 
-# Main AI: Ollama on the Proxmox/LAN host.
+# Main text AI.
 ollama_url = "http://192.168.10.181:11434"
 ollama_model = "llama3.2"
-ollama_system_prompt = "You are Jimmy, a helpful desktop AI companion. Never claim a desktop action happened unless Jimmy's action API completed it. Ask for confirmation for sensitive actions."
+ollama_system_prompt = "You are Jimmy, a helpful desktop AI companion. Use named actions only. Never claim an action happened unless Jimmy reports success."
 
-# Voice service: whisper.cpp STT + Piper TTS.
-voice_url = "http://127.0.0.1:5006"
-voice_status_url = "http://127.0.0.1:5006/health"
+# Separate vision model. The text model does not need to be vision-capable.
+# Install a vision model on the Ollama host, then put its exact name here.
+vision_url = "http://192.168.10.181:11434"
+vision_model = "llava:latest"
+
+# Voice service: whisper.cpp tiny.en + Piper.
+voice_url = "http://192.168.10.182:5006"
+voice_status_url = "http://192.168.10.182:5006/health"
 voice_engine = "whisper.cpp tiny.en"
 fixed_voice = "en_US-lessac-medium.onnx"
 loaded_voices = [
@@ -20,7 +25,7 @@ loaded_voices = [
   "en_US-amy-low.onnx",
   "en_GB-southern_english_female-low.onnx",
   "en_US-danny-low.onnx",
-  "en_GB-alan-medium.onnx",
+  "en_GB-alan-medium-low.onnx",
 ]
 piper = true
 voice_port = 5006
@@ -28,19 +33,42 @@ speech_rate = 0.9
 stt_ready = true
 voice_mode = "fixed voice"
 
-# Pending confirmations expire after this many seconds.
-confirmation_ttl_seconds = 120
+# Home Assistant. Keep the token out of Git; set it only in /etc/jimmy/config.toml.
+home_assistant_url = "http://homeassistant.local:8123"
+home_assistant_token = ""
 
-# These actions stop immediately and require an explicit /v1/confirm/<request_id> call.
+# Non-root CLI programs that Jimmy may run directly.
+allowed_cli_commands = [
+  "git",
+  "curl",
+  "systemctl",
+  "rc-service",
+  "rc-status",
+]
+
+# Root operations are NOT arbitrary sudo. These names map to a fixed helper.
+admin_actions = [
+  "emerge_sync",
+  "emerge_update",
+  "emerge_install",
+  "openrc_restart",
+]
+
+# Jonathan is a trusted orchestrator identity, but only authenticated requests can use it.
+# This can authorize the fixed admin-action path; it never grants arbitrary sudo or shell access.
+trusted_agent = "jonathan"
+trusted_agent_may_authorize_admin = true
+
+confirmation_ttl_seconds = 120
 require_confirmation_for = [
   "close_app",
   "type_text",
   "mouse_click",
   "shutdown",
   "reboot",
+  "admin_action",
 ]
 
-# Jimmy never executes arbitrary shell commands. Apps must be explicitly allowlisted.
 allowed_apps = [
   "firefox",
   "alacritty",
