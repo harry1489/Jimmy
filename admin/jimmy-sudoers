@@ -1,0 +1,5 @@
+# Install as /etc/sudoers.d/jimmy and validate with visudo.
+# Replace JIMMY_USER with the unprivileged account that runs Jimmy.
+JIMMY_USER ALL=(root) NOPASSWD: /usr/local/libexec/jimmy-admin emerge_sync
+JIMMY_USER ALL=(root) NOPASSWD: /usr/local/libexec/jimmy-admin emerge_update
+JIMMY_USER ALL=(root) NOPASSWD: /usr/local/libexec/jimmy-admin openrc_restart
