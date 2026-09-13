@@ -1,6 +1,6 @@
 [package]
 name = "jimmy"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 description = "Jimmy - permissioned desktop companion for Gentoo Linux + Hyprland"
 license = "MIT"
@@ -8,6 +8,7 @@ license = "MIT"
 [dependencies]
 anyhow = "1"
 axum = "0.8"
+base64 = "0.22"
 chrono = { version = "0.4", features = ["serde", "clock"] }
 clap = { version = "4", features = ["derive"] }
 hex = "0.4"
