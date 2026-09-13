@@ -10,7 +10,6 @@ ollama_model = "llama3.2"
 ollama_system_prompt = "You are Jimmy, a helpful desktop AI companion. Use named actions only. Never claim an action happened unless Jimmy reports success."
 
 # Separate vision model. The text model does not need to be vision-capable.
-# Install a vision model on the Ollama host, then put its exact name here.
 vision_url = "http://192.168.10.181:11434"
 vision_model = "llava:latest"
 
@@ -25,7 +24,7 @@ loaded_voices = [
   "en_US-amy-low.onnx",
   "en_GB-southern_english_female-low.onnx",
   "en_US-danny-low.onnx",
-  "en_GB-alan-medium-low.onnx",
+  "en_GB-alan-medium.onnx",
 ]
 piper = true
 voice_port = 5006
@@ -50,12 +49,11 @@ allowed_cli_commands = [
 admin_actions = [
   "emerge_sync",
   "emerge_update",
-  "emerge_install",
   "openrc_restart",
 ]
 
 # Jonathan is a trusted orchestrator identity, but only authenticated requests can use it.
-# This can authorize the fixed admin-action path; it never grants arbitrary sudo or shell access.
+# This never grants arbitrary sudo or arbitrary shell access.
 trusted_agent = "jonathan"
 trusted_agent_may_authorize_admin = true
 
