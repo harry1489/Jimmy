@@ -4,6 +4,33 @@ bind = "127.0.0.1:8787"
 name = "Jimmy"
 shared_secret = "REPLACE_WITH_A_64_HEX_CHARACTER_SECRET"
 
+# Main AI: Ollama on the Proxmox/LAN host.
+ollama_url = "http://192.168.10.181:11434"
+ollama_model = "llama3.2"
+ollama_system_prompt = "You are Jimmy, a helpful desktop AI companion. Never claim a desktop action happened unless Jimmy's action API completed it. Ask for confirmation for sensitive actions."
+
+# Voice service: whisper.cpp STT + Piper TTS.
+voice_url = "http://127.0.0.1:5006"
+voice_status_url = "http://127.0.0.1:5006/health"
+voice_engine = "whisper.cpp tiny.en"
+fixed_voice = "en_US-lessac-medium.onnx"
+loaded_voices = [
+  "en_US-lessac-medium.onnx",
+  "en_US-lessac-low.onnx",
+  "en_US-amy-low.onnx",
+  "en_GB-southern_english_female-low.onnx",
+  "en_US-danny-low.onnx",
+  "en_GB-alan-medium.onnx",
+]
+piper = true
+voice_port = 5006
+speech_rate = 0.9
+stt_ready = true
+voice_mode = "fixed voice"
+
+# Pending confirmations expire after this many seconds.
+confirmation_ttl_seconds = 120
+
 # These actions stop immediately and require an explicit /v1/confirm/<request_id> call.
 require_confirmation_for = [
   "close_app",
