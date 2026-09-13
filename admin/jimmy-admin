@@ -1,0 +1,22 @@
+#!/bin/sh
+set -eu
+
+# This helper is the ONLY program Jimmy may invoke through sudo.
+# No shell input, pipes, redirects, or arbitrary command names are accepted.
+
+case "${1:-}" in
+  emerge_sync)
+    exec /usr/bin/emerge --sync
+    ;;
+  emerge_update)
+    exec /usr/bin/emerge --ask --verbose --update --deep --newuse @world
+    ;;
+  openrc_restart)
+    # Deliberately fixed to the Jimmy service; do not accept a service name from the AI.
+    exec /sbin/rc-service jimmy restart
+    ;;
+  *)
+    echo "denied: unknown Jimmy admin action" >&2
+    exit 64
+    ;;
+esac
