@@ -101,7 +101,7 @@ loaded_voices = [
   "en_US-amy-low.onnx",
   "en_GB-southern_english_female-low.onnx",
   "en_US-danny-low.onnx",
-  "en_GB-alan-medium-low.onnx",
+  "en_GB-alan-medium.onnx",
 ]
 piper = true
 voice_port = 5006
