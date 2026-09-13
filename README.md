@@ -4,7 +4,22 @@ Jimmy is a small, permissioned desktop companion for Gentoo Linux + Hyprland. Th
 
 Test target: Gentoo Linux x86_64, OpenRC, Hyprland 0.54.x, Wayland.
 
-## What v0.1 can do
+## v0.2: local AI + voice integration
+
+Jimmy now uses your Ollama server as its AI backend:
+
+- Ollama: `http://192.168.10.181:11434`
+- Model: `llama3.2`
+- AI endpoint: `POST /v1/ai/chat`
+- Voice service: `http://127.0.0.1:5006`
+- STT: `whisper.cpp tiny.en`
+- TTS: Piper
+- Fixed voice: `en_US-lessac-medium.onnx`
+- Speech rate: `0.9`
+
+The configured voice inventory is also exposed through authenticated `/v1/voice/config`, while `/v1/voice/status` checks the configured voice service health endpoint.
+
+## Desktop capabilities
 
 - Run as an unprivileged OpenRC service.
 - Authenticate main-agent requests with HMAC-SHA256.
@@ -16,6 +31,7 @@ Test target: Gentoo Linux x86_64, OpenRC, Hyprland 0.54.x, Wayland.
 - Switch workspaces 1..99.
 - Take screenshots into `/tmp` using `grim`.
 - Require confirmation for dangerous/sensitive actions.
+- Store the original arguments with pending confirmations and expire them automatically.
 - Refuse arbitrary shell commands.
 - Refuse mouse/keyboard injection until its Linux permissions are explicitly configured.
 
@@ -23,11 +39,12 @@ Test target: Gentoo Linux x86_64, OpenRC, Hyprland 0.54.x, Wayland.
 
 Jimmy is intentionally **not** a root daemon. Keep it bound to `127.0.0.1` unless you deliberately add a private network layer.
 
-There are three important boundaries:
+There are four important boundaries:
 
 1. The main AI authenticates to Jimmy using an HMAC signature.
 2. Jimmy accepts named actions, not arbitrary commands.
 3. Sensitive actions enter a pending-confirmation state instead of executing immediately.
+4. Pending confirmations expire after a short configurable TTL.
 
 Do not put a real secret in Git. Because the OpenRC service runs as your normal desktop user, `/etc/jimmy/config.toml` must be readable by that user and should otherwise be private. For example, use owner `harry` and mode `0600`:
 
@@ -61,7 +78,7 @@ sudo sed -i "s/REPLACE_WITH_A_64_HEX_CHARACTER_SECRET/$(openssl rand -hex 32)/" 
 sudo chown harry:users /etc/jimmy/config.toml
 ```
 
-Edit the allowlist before starting Jimmy.
+Edit the allowlist before starting Jimmy. Make sure the desktop can reach `192.168.10.181:11434` and that the voice service is listening on port `5006`.
 
 Install the OpenRC service:
 
@@ -76,6 +93,22 @@ Check it:
 ```bash
 curl http://127.0.0.1:8787/health
 ```
+
+## AI endpoint
+
+`POST /v1/ai/chat` is HMAC-authenticated and forwards structured chat messages to Ollama's `/api/chat` endpoint using the configured model.
+
+Example request body:
+
+```json
+{
+  "messages": [
+    {"role": "user", "content": "Hello Jimmy"}
+  ]
+}
+```
+
+Jimmy automatically inserts its configured system prompt before sending the conversation to Ollama.
 
 ## HMAC requests
 
@@ -116,14 +149,38 @@ YOU approve
         ↓
 POST /v1/confirm/<request_id>
         ↓
-execute
+execute original action + original arguments
 ```
 
-The confirmation endpoint itself is authenticated too.
+The confirmation endpoint itself is authenticated and pending requests expire according to `confirmation_ttl_seconds`.
+
+## Voice / "Hey Jimmy"
+
+The configured voice stack is designed around:
+
+```text
+microphone
+  ↓
+wake-word detector ("Hey Jimmy")
+  ↓
+whisper.cpp tiny.en
+  ↓
+Ollama llama3.2
+  ↓
+structured Jimmy action / response
+  ↓
+permission engine
+  ↓
+Piper en_US-lessac-medium.onnx
+```
+
+Jimmy itself should never treat raw speech as a shell command. The voice layer produces structured actions such as `open_app`, `open_url`, `workspace`, or `lock`.
+
+The current Rust daemon records and reports the voice configuration and can health-check the service at port 5006. It does not assume an undocumented audio API for that service; the actual microphone/wake-word/TTS transport can be wired to the voice service once its endpoint contract is fixed.
 
 ## Main AI / remote control
 
-For your eventual main-agent integration, do **not** expose port 8787 directly to the public Internet. Prefer a private VPN/mesh network and keep the HMAC authentication in place. A future version can add mTLS/device certificates and replay protection.
+For your eventual main-agent integration, do **not** expose port 8787 directly to the public Internet. Prefer a private VPN/mesh network and keep the HMAC authentication in place. A future version can add mTLS/device certificates, request timestamps/nonces, and role-based agent identities.
 
 The intended architecture is:
 
@@ -133,44 +190,26 @@ You
  ▼
 Main AI / planner
  │
+ ├── Ollama llama3.2 @ 192.168.10.181:11434
+ │
  │ authenticated action request
  ▼
 Jimmy on Gentoo desktop
  │
  ├── Hyprland
  ├── applications
+ ├── whisper.cpp + Piper voice service @ :5006
  └── controlled Linux capabilities
 
-Proxmox
+Proxmox / LAN
+ ├── Ollama
  ├── PostgreSQL / memory
  └── main-agent services
 ```
 
-## Voice / "Hey Jimmy"
-
-Voice should be a separate process from the privileged action layer. The safe pipeline is:
-
-```text
-microphone
-  ↓
-wake-word detector ("Hey Jimmy")
-  ↓
-speech-to-text
-  ↓
-intent parser / main AI
-  ↓
-structured Jimmy action
-  ↓
-permission engine
-  ↓
-Jimmy
-```
-
-Jimmy itself should never treat raw speech as a shell command. The voice layer produces structured actions such as `open_app`, `open_url`, `workspace`, or `lock`.
-
 ## Future input-control module
 
-Mouse/keyboard control is deliberately disabled in v0.1. When it is added, use a narrowly scoped helper backed by Linux `uinput`/`ydotool` permissions rather than making Jimmy root. Give input control its own permission class and require confirmation by default.
+Mouse/keyboard control is deliberately disabled. When it is added, use a narrowly scoped helper backed by Linux `uinput`/`ydotool` permissions rather than making Jimmy root. Give input control its own permission class and require confirmation by default.
 
 ## System profile used for the initial design
 
