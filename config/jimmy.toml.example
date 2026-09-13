@@ -1,0 +1,21 @@
+# Copy to /etc/jimmy/config.toml and chmod 600 it.
+# Generate a secret with: openssl rand -hex 32
+bind = "127.0.0.1:8787"
+name = "Jimmy"
+shared_secret = "REPLACE_WITH_A_64_HEX_CHARACTER_SECRET"
+
+# These actions stop immediately and require an explicit /v1/confirm/<request_id> call.
+require_confirmation_for = [
+  "close_app",
+  "type_text",
+  "mouse_click",
+  "shutdown",
+  "reboot",
+]
+
+# Jimmy never executes arbitrary shell commands. Apps must be explicitly allowlisted.
+allowed_apps = [
+  "firefox",
+  "alacritty",
+  "code",
+]
