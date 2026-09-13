@@ -40,11 +40,13 @@ pveam update
 pveam available --section system | grep -E 'debian|ubuntu'
 ```
 
-Download a Debian template. Replace `local` if your template storage has another name:
+On current Proxmox template lists, use the exact Debian template filename shown by `pveam available`. For example, if the host reports `debian-13-standard_13.6-1_amd64.tar.zst`:
 
 ```bash
-pveam download local debian-13-standard_13.1-1_amd64.tar.zst
+pveam download local debian-13-standard_13.6-1_amd64.tar.zst
 ```
+
+If `pveam download` says the file already exists and has the correct checksum, that is fine.
 
 Find the downloaded template:
 
@@ -52,20 +54,49 @@ Find the downloaded template:
 pveam list local
 ```
 
-Create the LXC. Example values below use CT ID `200`, hostname `jimmy-backend`, `4` CPU cores, `4G` RAM, `20G` root disk, and bridge `vmbr0`:
+### Important: rootfs storage must support container volumes
+
+Do **not** assume `local` can be used for `--rootfs`. On many Proxmox installations, `local` is a `dir` storage that supports container templates but is not configured for container root disks. Your host may therefore return:
+
+```text
+storage: storage 'local' does not support container directories
+```
+
+Check which storage supports `rootdir`:
 
 ```bash
-pct create 200 local:vztmpl/debian-13-standard_13.1-1_amd64.tar.zst \
+pvesm status
+pvesm scan lvmthin <YOUR_LVMTHIN_STORAGE>
+```
+
+The easiest check is:
+
+```bash
+pvesm status
+```
+
+Look for a storage such as `local-lvm`, `local-zfs`, or another storage configured for `rootdir`.
+
+If your host has `local-lvm`, use it for `--rootfs` while keeping the template on `local`:
+
+```bash
+pct create 200 local:vztmpl/debian-13-standard_13.6-1_amd64.tar.zst \
   --hostname jimmy-backend \
   --cores 4 \
   --memory 4096 \
   --swap 1024 \
-  --rootfs local:20 \
+  --rootfs local-lvm:20 \
   --net0 name=eth0,bridge=vmbr0,ip=192.168.10.190/24,gw=192.168.10.1 \
   --unprivileged 1 \
   --onboot 1 \
   --features nesting=1
 ```
+
+If your root-disk storage has a different name, replace `local-lvm` with that storage.
+
+If you are unsure which storage to use, **stop before running `pct create` and paste the output of `pvesm status`**. The storage configuration determines the correct command.
+
+The example above uses CT ID `200`, hostname `jimmy-backend`, `4` CPU cores, `4G` RAM, `20G` root disk, bridge `vmbr0`, and example IP `192.168.10.190`.
 
 **Change `192.168.10.190` to an unused IP on your LAN.** Also change `192.168.10.1` if that is not your router/gateway, and change `vmbr0` if your Proxmox LAN bridge has another name.
 
