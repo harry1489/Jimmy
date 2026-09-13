@@ -6,7 +6,7 @@ use hmac::{Hmac, Mac};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
-use std::{collections::HashMap, net::SocketAddr, process::Command, sync::Arc};
+use std::{collections::HashMap, process::Command, sync::Arc};
 use tokio::sync::RwLock;
 use tracing::info;
 use uuid::Uuid;
@@ -25,44 +25,25 @@ struct Args {
 
 #[derive(Debug, Clone, Deserialize)]
 struct Config {
-    #[serde(default = "default_bind")]
-    bind: String,
-    #[serde(default)]
-    shared_secret: String,
-    #[serde(default = "default_name")]
-    name: String,
-    #[serde(default = "default_confirm")]
-    require_confirmation_for: Vec<String>,
-    #[serde(default)]
-    allowed_apps: Vec<String>,
-    #[serde(default = "default_ollama_url")]
-    ollama_url: String,
-    #[serde(default = "default_ollama_model")]
-    ollama_model: String,
-    #[serde(default = "default_system_prompt")]
-    ollama_system_prompt: String,
-    #[serde(default = "default_voice_url")]
-    voice_url: String,
-    #[serde(default = "default_voice_status_url")]
-    voice_status_url: String,
-    #[serde(default = "default_voice_engine")]
-    voice_engine: String,
-    #[serde(default = "default_fixed_voice")]
-    fixed_voice: String,
-    #[serde(default)]
-    loaded_voices: Vec<String>,
-    #[serde(default = "default_voice_port")]
-    voice_port: u16,
-    #[serde(default = "default_speech_rate")]
-    speech_rate: f32,
-    #[serde(default = "default_voice_mode")]
-    voice_mode: String,
-    #[serde(default = "default_stt_ready")]
-    stt_ready: bool,
-    #[serde(default)]
-    piper: bool,
-    #[serde(default = "default_confirmation_ttl")]
-    confirmation_ttl_seconds: i64,
+    #[serde(default = "default_bind")] bind: String,
+    #[serde(default)] shared_secret: String,
+    #[serde(default = "default_name")] name: String,
+    #[serde(default = "default_confirm")] require_confirmation_for: Vec<String>,
+    #[serde(default)] allowed_apps: Vec<String>,
+    #[serde(default = "default_ollama_url")] ollama_url: String,
+    #[serde(default = "default_ollama_model")] ollama_model: String,
+    #[serde(default = "default_system_prompt")] ollama_system_prompt: String,
+    #[serde(default = "default_voice_url")] voice_url: String,
+    #[serde(default = "default_voice_status_url")] voice_status_url: String,
+    #[serde(default = "default_voice_engine")] voice_engine: String,
+    #[serde(default = "default_fixed_voice")] fixed_voice: String,
+    #[serde(default)] loaded_voices: Vec<String>,
+    #[serde(default = "default_voice_port")] voice_port: u16,
+    #[serde(default = "default_speech_rate")] speech_rate: f32,
+    #[serde(default = "default_voice_mode")] voice_mode: String,
+    #[serde(default = "default_stt_ready")] stt_ready: bool,
+    #[serde(default)] piper: bool,
+    #[serde(default = "default_confirmation_ttl")] confirmation_ttl_seconds: i64,
 }
 
 fn default_bind() -> String { "127.0.0.1:8787".into() }
@@ -70,7 +51,7 @@ fn default_name() -> String { "Jimmy".into() }
 fn default_confirm() -> Vec<String> { vec!["close_app".into(), "type_text".into(), "mouse_click".into(), "shutdown".into(), "reboot".into()] }
 fn default_ollama_url() -> String { "http://192.168.10.181:11434".into() }
 fn default_ollama_model() -> String { "llama3.2".into() }
-fn default_system_prompt() -> String { "You are Jimmy, a helpful desktop AI companion. Never invent that a desktop action happened; desktop actions are performed only through Jimmy's permissioned action API. Be concise, friendly, and practical.".into() }
+fn default_system_prompt() -> String { "You are Jimmy, a helpful desktop AI companion. Never claim a desktop action happened unless Jimmy's action API completed it. Ask for confirmation for sensitive actions. Be concise, friendly, and practical.".into() }
 fn default_voice_url() -> String { "http://127.0.0.1:5006".into() }
 fn default_voice_status_url() -> String { "http://127.0.0.1:5006/health".into() }
 fn default_voice_engine() -> String { "whisper.cpp tiny.en".into() }
@@ -82,101 +63,45 @@ fn default_stt_ready() -> bool { true }
 fn default_confirmation_ttl() -> i64 { 120 }
 
 #[derive(Debug)]
-struct Jimmy {
-    config: Config,
-    pending: HashMap<String, PendingAction>,
-    http: Client,
-}
+struct Jimmy { config: Config, pending: HashMap<String, PendingAction>, http: Client }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct PendingAction {
-    id: String,
-    action: String,
-    args: serde_json::Value,
-    created_at: String,
-    reason: Option<String>,
-    source: String,
-}
+struct PendingAction { id: String, action: String, args: serde_json::Value, created_at: String, reason: Option<String>, source: String }
 
 #[derive(Debug, Deserialize, Serialize)]
-struct ActionRequest {
-    action: String,
-    #[serde(default)]
-    args: serde_json::Value,
-    #[serde(default)]
-    reason: Option<String>,
-    #[serde(default)]
-    source: String,
-}
+struct ActionRequest { action: String, #[serde(default)] args: serde_json::Value, #[serde(default)] reason: Option<String>, #[serde(default)] source: String }
 
 #[derive(Debug, Serialize)]
-struct ActionResponse {
-    ok: bool,
-    status: String,
-    message: String,
-    request_id: String,
-    confirmation_required: bool,
-}
+struct ActionResponse { ok: bool, status: String, message: String, request_id: String, confirmation_required: bool }
 
 #[derive(Debug, Deserialize)]
-struct ChatRequest {
-    messages: Vec<ChatMessage>,
-    #[serde(default)]
-    temperature: Option<f32>,
-}
+struct ChatRequest { messages: Vec<ChatMessage>, #[serde(default)] temperature: Option<f32> }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct ChatMessage {
-    role: String,
-    content: String,
-}
+struct ChatMessage { role: String, content: String }
 
 #[derive(Debug, Serialize)]
-struct OllamaChatRequest {
-    model: String,
-    messages: Vec<ChatMessage>,
-    stream: bool,
-    options: OllamaOptions,
-}
+struct OllamaChatRequest { model: String, messages: Vec<ChatMessage>, stream: bool, options: OllamaOptions }
 
 #[derive(Debug, Serialize)]
-struct OllamaOptions {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    temperature: Option<f32>,
-}
+struct OllamaOptions { #[serde(skip_serializing_if = "Option::is_none")] temperature: Option<f32> }
 
-#[derive(Debug, Deserialize, Serialize)]
-struct OllamaChatResponse {
-    message: ChatMessage,
-    #[serde(flatten)]
-    extra: serde_json::Value,
-}
+#[derive(Debug, Deserialize)]
+struct OllamaChatResponse { message: ChatMessage }
 
 #[derive(Debug, Serialize)]
-struct VoiceConfigResponse {
-    engine: String,
-    fixed_voice: String,
-    loaded_voices: Vec<String>,
-    piper: bool,
-    port: u16,
-    speech_rate: f32,
-    status: String,
-    stt_ready: bool,
-    voice_mode: String,
-}
+struct VoiceConfigResponse { engine: String, fixed_voice: String, loaded_voices: Vec<String>, piper: bool, port: u16, speech_rate: f32, status: String, stt_ready: bool, voice_mode: String }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt().with_env_filter("info").init();
     let args = Args::parse();
-    let raw = tokio::fs::read_to_string(&args.config).await
-        .with_context(|| format!("cannot read {}", args.config))?;
+    let raw = tokio::fs::read_to_string(&args.config).await.with_context(|| format!("cannot read {}", args.config))?;
     let config: Config = toml::from_str(&raw).context("invalid Jimmy config")?;
     if config.shared_secret.len() < 32 { bail!("shared_secret must be at least 32 characters"); }
     let bind = if config.bind.is_empty() { args.bind } else { config.bind.clone() };
     let http = Client::builder().connect_timeout(std::time::Duration::from_secs(3)).timeout(std::time::Duration::from_secs(120)).build()?;
     let state: AppState = Arc::new(RwLock::new(Jimmy { config, pending: HashMap::new(), http }));
-
     let app = Router::new()
         .route("/health", get(health))
         .route("/v1/status", get(status))
@@ -186,7 +111,6 @@ async fn main() -> Result<()> {
         .route("/v1/voice/config", get(voice_config))
         .route("/v1/voice/status", get(voice_status))
         .with_state(state);
-
     let listener = tokio::net::TcpListener::bind(&bind).await?;
     info!("Jimmy listening on {}", bind);
     axum::serve(listener, app).await?;
@@ -196,9 +120,7 @@ async fn main() -> Result<()> {
 async fn health() -> impl IntoResponse { Json(serde_json::json!({"ok": true, "name": "Jimmy", "version": "0.2.0", "ai_model": "llama3.2"})) }
 
 async fn status(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
-    if let Err(e) = authenticate(&state, &headers, b"status").await {
-        return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"ok": false, "error": e.to_string()}))).into_response();
-    }
+    if let Err(e) = authenticate(&state, &headers, b"status").await { return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"ok": false, "error": e.to_string()}))).into_response(); }
     let hypr = run("hyprctl", &["activewindow", "-j"]).unwrap_or_else(|_| "{}".into());
     let uptime = run("uptime", &["-p"]).unwrap_or_default();
     let cfg = state.read().await.config.clone();
@@ -207,9 +129,7 @@ async fn status(State(state): State<AppState>, headers: HeaderMap) -> impl IntoR
 
 async fn action(State(state): State<AppState>, headers: HeaderMap, Json(req): Json<ActionRequest>) -> impl IntoResponse {
     let payload = serde_json::to_vec(&req).unwrap_or_default();
-    if let Err(e) = authenticate(&state, &headers, &payload).await {
-        return (StatusCode::UNAUTHORIZED, Json(ActionResponse { ok:false, status:"denied".into(), message:e.to_string(), request_id:Uuid::new_v4().to_string(), confirmation_required:false })).into_response();
-    }
+    if let Err(e) = authenticate(&state, &headers, &payload).await { return (StatusCode::UNAUTHORIZED, Json(ActionResponse { ok:false, status:"denied".into(), message:e.to_string(), request_id:Uuid::new_v4().to_string(), confirmation_required:false })).into_response(); }
     let request_id = Uuid::new_v4().to_string();
     let mut jimmy = state.write().await;
     let confirmation = jimmy.config.require_confirmation_for.iter().any(|x| x == &req.action);
@@ -227,16 +147,12 @@ async fn action(State(state): State<AppState>, headers: HeaderMap, Json(req): Js
 }
 
 async fn confirm(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<String>) -> impl IntoResponse {
-    if let Err(e) = authenticate(&state, &headers, id.as_bytes()).await {
-        return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"ok":false,"error":e.to_string()}))).into_response();
-    }
+    if let Err(e) = authenticate(&state, &headers, id.as_bytes()).await { return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"ok":false,"error":e.to_string()}))).into_response(); }
     let pending = { state.write().await.pending.remove(&id) };
     let Some(pending) = pending else { return (StatusCode::NOT_FOUND, Json(serde_json::json!({"ok":false,"error":"confirmation not found or expired"}))).into_response(); };
     let cfg = { state.read().await.config.clone() };
     let created = DateTime::parse_from_rfc3339(&pending.created_at).ok().map(|d| d.with_timezone(&Utc));
-    if created.map(|t| Utc::now() - t > Duration::seconds(cfg.confirmation_ttl_seconds)).unwrap_or(true) {
-        return (StatusCode::GONE, Json(serde_json::json!({"ok":false,"error":"confirmation expired"}))).into_response();
-    }
+    if created.map(|t| Utc::now() - t > Duration::seconds(cfg.confirmation_ttl_seconds)).unwrap_or(true) { return (StatusCode::GONE, Json(serde_json::json!({"ok":false,"error":"confirmation expired"}))).into_response(); }
     match execute(&cfg, &pending.action, &pending.args).await {
         Ok(message) => Json(serde_json::json!({"ok":true,"status":"completed","message":message,"request_id":id})).into_response(),
         Err(e) => (StatusCode::BAD_REQUEST, Json(serde_json::json!({"ok":false,"status":"failed","error":e.to_string()}))).into_response(),
@@ -245,9 +161,7 @@ async fn confirm(State(state): State<AppState>, headers: HeaderMap, Path(id): Pa
 
 async fn ai_chat(State(state): State<AppState>, headers: HeaderMap, Json(req): Json<ChatRequest>) -> impl IntoResponse {
     let payload = serde_json::to_vec(&req).unwrap_or_default();
-    if let Err(e) = authenticate(&state, &headers, &payload).await {
-        return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"ok":false,"error":e.to_string()}))).into_response();
-    }
+    if let Err(e) = authenticate(&state, &headers, &payload).await { return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"ok":false,"error":e.to_string()}))).into_response(); }
     if req.messages.is_empty() { return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"ok":false,"error":"messages cannot be empty"}))).into_response(); }
     let (cfg, client) = { let s = state.read().await; (s.config.clone(), s.http.clone()) };
     let mut messages = Vec::with_capacity(req.messages.len() + 1);
@@ -261,7 +175,7 @@ async fn ai_chat(State(state): State<AppState>, headers: HeaderMap, Json(req): J
             Err(e) => (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"ok":false,"error":format!("invalid Ollama response: {}", e)}))).into_response(),
         },
         Ok(resp) => { let status = resp.status(); let text = resp.text().await.unwrap_or_default(); (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"ok":false,"error":format!("Ollama returned {}: {}", status, text)}))).into_response() }
-        Err(e) => (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"ok":false,"error":format!("cannot reach Ollama: {}", e)}))).into_response()),
+        Err(e) => (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"ok":false,"error":format!("cannot reach Ollama: {}", e)}))).into_response(),
     }
 }
 
@@ -284,9 +198,7 @@ async fn voice_status(State(state): State<AppState>, headers: HeaderMap) -> impl
     }
 }
 
-fn voice_config_value(cfg: &Config) -> VoiceConfigResponse {
-    VoiceConfigResponse { engine:cfg.voice_engine.clone(), fixed_voice:cfg.fixed_voice.clone(), loaded_voices:cfg.loaded_voices.clone(), piper:cfg.piper, port:cfg.voice_port, speech_rate:cfg.speech_rate, status:"ok".into(), stt_ready:cfg.stt_ready, voice_mode:cfg.voice_mode.clone() }
-}
+fn voice_config_value(cfg: &Config) -> VoiceConfigResponse { VoiceConfigResponse { engine:cfg.voice_engine.clone(), fixed_voice:cfg.fixed_voice.clone(), loaded_voices:cfg.loaded_voices.clone(), piper:cfg.piper, port:cfg.voice_port, speech_rate:cfg.speech_rate, status:"ok".into(), stt_ready:cfg.stt_ready, voice_mode:cfg.voice_mode.clone() } }
 
 async fn authenticate(state: &AppState, headers: &HeaderMap, body: &[u8]) -> Result<()> {
     let signature = headers.get("x-jimmy-signature").and_then(|v| v.to_str().ok()).unwrap_or("");
@@ -298,10 +210,7 @@ async fn authenticate(state: &AppState, headers: &HeaderMap, body: &[u8]) -> Res
     Ok(())
 }
 
-fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() { return false; }
-    a.iter().zip(b).fold(0u8, |acc, (x,y)| acc | (x ^ y)) == 0
-}
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool { if a.len() != b.len() { return false; } a.iter().zip(b).fold(0u8, |acc, (x,y)| acc | (x ^ y)) == 0 }
 
 async fn execute(cfg: &Config, action: &str, args: &serde_json::Value) -> Result<String> {
     match action {
@@ -325,6 +234,3 @@ fn run(program: &str, args: &[&str]) -> Result<String> {
     if !out.status.success() { bail!("{} failed: {}", program, String::from_utf8_lossy(&out.stderr).trim()); }
     Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
-
-#[allow(dead_code)]
-fn _socket_addr(bind: &str) -> Result<SocketAddr> { Ok(bind.parse()?) }
