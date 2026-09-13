@@ -1,0 +1,15 @@
+#!/sbin/openrc-run
+
+name="jimmy-ui"
+description="Jimmy pink Y2K local UI"
+command="/usr/local/bin/jimmy_ui"
+command_user="harry:users"
+command_background="yes"
+pidfile="/run/${RC_SVCNAME}.pid"
+output_log="/var/log/${RC_SVCNAME}.log"
+error_log="/var/log/${RC_SVCNAME}.err"
+
+depend() {
+    need localmount
+    after jimmy-presence
+}
