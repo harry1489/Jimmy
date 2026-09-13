@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>♡ Jimmy</title>
+<style>
+:root{font-family:Inter,ui-sans-serif,system-ui,sans-serif;color:#fff;--pink:#ff4fa3;--hot:#ff168f;--soft:#ffc1e3;--glass:rgba(255,255,255,.11)}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;overflow:hidden;background:radial-gradient(circle at 50% 25%,#ff79bc 0,#9d326d 28%,#251020 72%,#100812 100%);display:grid;place-items:center}
+body:before{content:"";position:fixed;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.16),transparent 32%,rgba(255,255,255,.04));pointer-events:none}
+.shell{width:min(760px,92vw);padding:34px;border:1px solid rgba(255,255,255,.22);border-radius:34px;background:rgba(36,10,29,.58);backdrop-filter:blur(26px);box-shadow:0 30px 90px rgba(0,0,0,.45),inset 0 1px rgba(255,255,255,.25);text-align:center}
+.brand{letter-spacing:.22em;text-transform:uppercase;font-size:12px;color:var(--soft)}h1{margin:8px 0 4px;font-size:58px;letter-spacing:-.05em;text-shadow:0 0 30px rgba(255,105,180,.8)}.sub{color:#ffd7ed;font-size:14px}
+.orb{margin:38px auto 26px;width:190px;height:190px;border-radius:50%;background:radial-gradient(circle at 35% 28%,#fff,#ffd5eb 18%,#ff64b1 43%,#d41478 70%,#721044);box-shadow:0 0 35px rgba(255,78,164,.8),0 0 110px rgba(255,30,143,.42);display:grid;place-items:center;transition:.25s transform,.25s box-shadow}.orb:after{content:"♡";font-size:78px;color:#fff;text-shadow:0 0 20px #fff}.orb.active{transform:scale(1.09);box-shadow:0 0 45px #fff,0 0 130px rgba(255,40,153,.95);animation:pulse .9s infinite alternate}@keyframes pulse{to{filter:brightness(1.18)}}
+.status{display:inline-flex;align-items:center;gap:10px;padding:11px 18px;border-radius:999px;background:var(--glass);border:1px solid rgba(255,255,255,.16);color:#ffe8f4}.dot{width:9px;height:9px;border-radius:50%;background:#ff83c5;box-shadow:0 0 12px #ff83c5}.activeText{font-weight:700;color:#fff}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:26px}.card{padding:15px;border-radius:20px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);text-align:left}.label{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:#ffb6dc}.value{margin-top:5px;font-weight:650}
+.footer{margin-top:22px;font-size:11px;color:#cda8bd}.privacy{color:#ffcae5}@media(max-width:600px){h1{font-size:44px}.cards{grid-template-columns:1fr}.shell{padding:25px}}
+</style></head>
+<body><main class="shell">
+<div class="brand">♡ local desktop companion ♡</div><h1>Jimmy</h1><div class="sub">pink Y2K mode · private · local</div>
+<div id="orb" class="orb"></div>
+<div class="status"><span class="dot"></span><span id="status">Listening for <b>Hey Jimmy</b>…</span></div>
+<section class="cards"><div class="card"><div class="label">Voice</div><div class="value">Whisper + Piper</div></div><div class="card"><div class="label">Vision</div><div class="value">Local perception</div></div><div class="card"><div class="label">Privacy</div><div class="value privacy">Camera stays local</div></div></section>
+<div class="footer">Presence is only presence — never authentication or permission.</div>
+</main>
+<script>
+const orb=document.getElementById('orb'),status=document.getElementById('status');
+async function tick(){try{const r=await fetch('/api/state',{cache:'no-store'});const s=await r.json();orb.classList.toggle('active',s.active);status.innerHTML=s.active?'♡ <span class="activeText">Hi! I heard “Hey Jimmy”</span>':'Listening for <b>Hey Jimmy</b>…';}catch(e){status.textContent='Jimmy UI is waiting…'}}
+setInterval(tick,250);tick();
+</script></body></html>
