@@ -1,0 +1,19 @@
+#!/sbin/openrc-run
+
+name="jimmy"
+description="Jimmy permissioned desktop companion"
+command="/usr/local/bin/jimmy"
+command_args="--config /etc/jimmy/config.toml"
+command_user="harry:users"
+command_background="yes"
+pidfile="/run/${RC_SVCNAME}.pid"
+output_log="/var/log/${RC_SVCNAME}.log"
+error_log="/var/log/${RC_SVCNAME}.err"
+
+# Jimmy is deliberately bound to localhost by default.
+# If you later expose it to your LAN/VPN, put it behind TLS or a private authenticated tunnel.
+
+depend() {
+    need localmount
+    after bootmisc
+}
