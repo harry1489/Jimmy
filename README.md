@@ -29,7 +29,12 @@ There are three important boundaries:
 2. Jimmy accepts named actions, not arbitrary commands.
 3. Sensitive actions enter a pending-confirmation state instead of executing immediately.
 
-Do not put a real secret in Git. `/etc/jimmy/config.toml` should be owned by root and mode `0600`.
+Do not put a real secret in Git. Because the OpenRC service runs as your normal desktop user, `/etc/jimmy/config.toml` must be readable by that user and should otherwise be private. For example, use owner `harry` and mode `0600`:
+
+```bash
+sudo chown harry:users /etc/jimmy/config.toml
+sudo chmod 600 /etc/jimmy/config.toml
+```
 
 ## Gentoo dependencies
 
@@ -53,6 +58,7 @@ cargo build --release
 sudo install -Dm755 target/release/jimmy /usr/local/bin/jimmy
 sudo install -Dm600 config/jimmy.toml.example /etc/jimmy/config.toml
 sudo sed -i "s/REPLACE_WITH_A_64_HEX_CHARACTER_SECRET/$(openssl rand -hex 32)/" /etc/jimmy/config.toml
+sudo chown harry:users /etc/jimmy/config.toml
 ```
 
 Edit the allowlist before starting Jimmy.
@@ -92,6 +98,8 @@ print(sig)
 ```
 
 Then send `X-Jimmy-Signature: <signature>`.
+
+The repository also includes `scripts/jimmy_request.py` for testing requests from your main agent.
 
 ## Confirmation flow
 
