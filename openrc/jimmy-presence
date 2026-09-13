@@ -1,0 +1,17 @@
+#!/sbin/openrc-run
+
+name="jimmy-presence"
+description="Jimmy local camera presence detector"
+command="/usr/local/bin/jimmy_presence"
+command_user="harry:video"
+command_background="yes"
+pidfile="/run/${RC_SVCNAME}.pid"
+output_log="/var/log/${RC_SVCNAME}.log"
+error_log="/var/log/${RC_SVCNAME}.err"
+
+env="JIMMY_PRESENCE_BIND=127.0.0.1:8791 JIMMY_CAMERA_DEVICE=0 JIMMY_PRESENCE_INTERVAL_MS=1000 JIMMY_PRESENCE_AWAY_AFTER_SECONDS=30"
+
+depend() {
+    need localmount
+    after bootmisc
+}
