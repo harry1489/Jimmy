@@ -117,7 +117,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn health() -> impl IntoResponse { Json(serde_json::json!({"ok": true, "name": "Jimmy", "version": "0.2.0", "ai_model": "llama3.2"})) }
+async fn health() -> impl IntoResponse { Json(serde_json::json!({"ok": true, "name": "Jimmy", "version": "0.3.0", "ai_model": "llama3.2"})) }
 
 async fn status(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
     if let Err(e) = authenticate(&state, &headers, b"status").await { return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"ok": false, "error": e.to_string()}))).into_response(); }
@@ -147,16 +147,13 @@ async fn action(State(state): State<AppState>, headers: HeaderMap, Json(req): Js
 }
 
 async fn confirm(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<String>) -> impl IntoResponse {
-    if let Err(e) = authenticate(&state, &headers, id.as_bytes()).await { return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"ok":false,"error":e.to_string()}))).into_response(); }
-    let pending = { state.write().await.pending.remove(&id) };
-    let Some(pending) = pending else { return (StatusCode::NOT_FOUND, Json(serde_json::json!({"ok":false,"error":"confirmation not found or expired"}))).into_response(); };
-    let cfg = { state.read().await.config.clone() };
-    let created = DateTime::parse_from_rfc3339(&pending.created_at).ok().map(|d| d.with_timezone(&Utc));
-    if created.map(|t| Utc::now() - t > Duration::seconds(cfg.confirmation_ttl_seconds)).unwrap_or(true) { return (StatusCode::GONE, Json(serde_json::json!({"ok":false,"error":"confirmation expired"}))).into_response(); }
-    match execute(&cfg, &pending.action, &pending.args).await {
-        Ok(message) => Json(serde_json::json!({"ok":true,"status":"completed","message":message,"request_id":id})).into_response(),
-        Err(e) => (StatusCode::BAD_REQUEST, Json(serde_json::json!({"ok":false,"status":"failed","error":e.to_string()}))).into_response(),
-    }
+    if let Err(e)=authenticate(&state,&headers,id.as_bytes()).await{return (StatusCode::UNAUTHORIZED,Json(serde_json::json!({"ok":false,"error":e.to_string()}))).into_response();}
+    let pending={state.write().await.pending.remove(&id)};
+    let Some(pending)=pending else{return (StatusCode::NOT_FOUND,Json(serde_json::json!({"ok":false,"error":"confirmation not found or expired"}))).into_response();};
+    let cfg={state.read().await.config.clone()};
+    let created=DateTime::parse_from_rfc3339(&pending.created_at).ok().map(|d|d.with_timezone(&Utc));
+    if created.map(|t|Utc::now()-t>Duration::seconds(cfg.confirmation_ttl_seconds)).unwrap_or(true){return (StatusCode::GONE,Json(serde_json::json!({"ok":false,"error":"confirmation expired"}))).into_response();}
+    match execute(&cfg,&pending.action,&pending.args).await{Ok(message)=>Json(serde_json::json!({"ok":true,"status":"completed","message":message,"request_id":id})).into_response(),Err(e)=>(StatusCode::BAD_REQUEST,Json(serde_json::json!({"ok":false,"status":"failed","error":e.to_string()}))).into_response()}
 }
 
 async fn ai_chat(State(state): State<AppState>, headers: HeaderMap, Json(req): Json<ChatRequest>) -> impl IntoResponse {
