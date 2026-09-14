@@ -66,13 +66,6 @@ Check which storage supports `rootdir`:
 
 ```bash
 pvesm status
-pvesm scan lvmthin <YOUR_LVMTHIN_STORAGE>
-```
-
-The easiest check is:
-
-```bash
-pvesm status
 ```
 
 Look for a storage such as `local-lvm`, `local-zfs`, or another storage configured for `rootdir`.
@@ -123,7 +116,7 @@ Inside the LXC:
 ```bash
 apt update
 apt upgrade -y
-apt install -y git curl build-essential pkg-config libssl-dev ca-certificates
+apt install -y git curl build-essential pkg-config libssl-dev ca-certificates cargo rustc clang libclang-dev
 ```
 
 Then clone Jimmy:
@@ -134,6 +127,54 @@ cd /opt/Jimmy
 ```
 
 If the LXC is only being used as the backend, **do not install LLaVA in the LXC**. The LXC will call Ollama/LLaVA on the main Gentoo PC over the LAN.
+
+## Build Jimmy on the Gentoo desktop
+
+The Rust OpenCV dependency uses `opencv-binding-generator` during compilation. The generator needs a `clang` executable in addition to the OpenCV development files.
+
+On Gentoo, make sure Clang is installed:
+
+```bash
+sudo emerge --ask llvm-core/clang
+clang --version
+```
+
+Then build:
+
+```bash
+cd ~/Jimmy
+cargo build --release
+```
+
+If the build previously stopped at:
+
+```text
+Can't find clang binary
+```
+
+install Clang first and rerun the build. There is no need to reinstall OpenCV if the build already detects your OpenCV headers and libraries correctly.
+
+## Build Jimmy in the LXC
+
+Inside the LXC:
+
+```bash
+cd /opt/Jimmy
+cargo build --release
+install -Dm755 target/release/jimmy_backend /usr/local/bin/jimmy_backend
+```
+
+The current crate includes the Rust/OpenCV desktop components, so the LXC build also needs its OpenCV/Clang build dependencies even though the LXC itself will not access the webcam or GPU. A future feature split can make the backend-only build smaller.
+
+Configure the backend to point to the main Gentoo PC:
+
+```toml
+ollama_url = "http://192.168.10.181:11434"
+vision_url = "http://192.168.10.181:11434"
+vision_model = "llava:latest"
+```
+
+The LXC therefore acts as the backend, while the main PC owns the vision model and desktop hardware.
 
 ## Put LLaVA on the main Gentoo PC
 
@@ -166,26 +207,6 @@ curl http://192.168.10.181:11434/api/tags
 If that works, the LXC can use the main PC's LLaVA without having its own copy of the model.
 
 Do not expose port `11434` to the public Internet. Allow it only from your trusted LAN/VPN and firewall it appropriately.
-
-## Build Jimmy in the LXC
-
-Inside the LXC:
-
-```bash
-cd /opt/Jimmy
-cargo build --release
-install -Dm755 target/release/jimmy_backend /usr/local/bin/jimmy_backend
-```
-
-Configure the backend to point to the main Gentoo PC:
-
-```toml
-ollama_url = "http://192.168.10.181:11434"
-vision_url = "http://192.168.10.181:11434"
-vision_model = "llava:latest"
-```
-
-The LXC therefore acts as the backend, while the main PC owns the vision model and desktop hardware.
 
 ## Proxmox CLI management
 
